@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+  <title>FarmSense Pro</title>
+
+  <!-- Firebase -->
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
+  <!-- Chart -->
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    body {
+      font-family: Arial;
+      background: #12121c;
+      color: white;
+      text-align: center;
+    }
+
+    .card {
+      background: #1f1f2e;
+      padding: 20px;
+      margin: 10px;
+      border-radius: 15px;
+      display: inline-block;
+      width: 220px;
+      transition: 0.3s;
+    }
+
+    .danger { background: #b71c1c !important; }
+
+    input, button {
+      padding: 10px;
+      margin: 5px;
+      width: 220px;
+    }
+
+    button {
+      background: #00c853;
+      border: none;
+      color: white;
+      cursor: pointer;
+    }
+
+    #alert {
+      background: red;
+      padding: 10px;
+      display: none;
+      margin: 10px;
+      border-radius: 10px;
+    }
+  </style>
+
+</head>
+
+<body>
+
+<h1>🐔 FarmSense Pro</h1>
+
+<div id="login">
+  <input type="email" id="email" placeholder="Email"><br>
+  <input type="password" id="password" placeholder="Password"><br>
+  <button onclick="loginUser()">Login</button>
+</div>
+
+<div id="dashboard" style="display:none;">
+
+  <h2 id="clock">--:--:--</h2>
+
+  <div id="alert">⚠ BAHAYA TERDETEKSI!</div>
+
+  <div id="cardSuhu" class="card">
+    <h3>🌡 Suhu</h3>
+    <h1 id="suhu">--</h1>
+  </div>
+
+  <div id="cardGas" class="card">
+    <h3>💨 Gas</h3>
+    <h1 id="gas">--</h1>
+  </div>
+
+  <div id="cardPakan" class="card">
+    <h3>🍚 Pakan</h3>
+    <h1 id="pakan">--</h1>
+  </div>
+
+  <p id="time">--</p>
+
+<canvas id="chart"></canvas>
+
+</div>
+
+<script>
+window.onload = function(){
+
+  // ===== FIREBASE CONFIG =====
+ const firebaseConfig = {
+  apiKey: "AIzaSyAJ5KM4SvW1zBH0Awh4RgYwhG_vqzo1ux0",
+  authDomain: "farmsensv2.firebaseapp.com",
+  databaseURL: "https://farmsensv2-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "farmsensv2",
+  storageBucket: "farmsensv2.firebasestorage.app",
+  messagingSenderId: "168306185912",
+  appId: "1:168306185912:web:5c04f6346e77495301464d"
+};
+
+  firebase.initializeApp(firebaseConfig);
+
+  const auth = firebase.auth();
+  const db = firebase.database();
+
+  // ===== ELEMENT =====
+  const loginDiv = document.getElementById("login");
+  const dashboardDiv = document.getElementById("dashboard");
+
+  const suhuEl = document.getElementById("suhu");
+  const gasEl = document.getElementById("gas");
+  const pakanEl = document.getElementById("pakan");
+  const timeEl = document.getElementById("time");
+
+  const cardSuhu = document.getElementById("cardSuhu");
+  const cardGas = document.getElementById("cardGas");
+  const cardPakan = document.getElementById("cardPakan");
+  const alertBox = document.getElementById("alert");
+
+  const clockEl = document.getElementById("clock");
+
+  // ===== CHART =====
+  const ctx = document.getElementById('chart').getContext('2d');
+  const chart = new Chart(ctx,{
+    type:'line',
+    data:{
+      labels:[],
+      datasets:[
+        {label:'Suhu', data:[]},
+        {label:'Gas', data:[]}
+      ]
+    }
+  });
+
+  // ===== LOGIN =====
+  window.loginUser = function(){
+    const email = document.getElementById("email").value;
+    const pass = document.getElementById("password").value;
+
+    auth.signInWithEmailAndPassword(email, pass)
+    .then(() => {
+      loginDiv.style.display = "none";
+      dashboardDiv.style.display = "block";
+      loadData();
+    })
+    .catch(err => alert(err.message));
+  }
+
+  // ===== LOAD DATA =====
+  function loadData(){
+    const ref = db.ref("farmSense/sensor");
+
+    ref.on("value", snap=>{
+      const d = snap.val();
+      if(!d) return;
+
+      suhuEl.innerHTML = d.suhu + " °C";
+      gasEl.innerHTML = d.gas + " ppm";
+      pakanEl.innerHTML = d.pakan + " %";
+      timeEl.innerHTML = "Update: " + d.waktu;
+
+      // ALERT
+      let bahaya = false;
+
+      if(d.suhu > 33 || d.suhu < 30){
+        cardSuhu.classList.add("danger");
+        bahaya = true;
+      } else cardSuhu.classList.remove("danger");
+
+      if(d.gas > 15){
+        cardGas.classList.add("danger");
+        bahaya = true;
+      } else cardGas.classList.remove("danger");
+
+      if(d.pakan < 15){
+        cardPakan.classList.add("danger");
+        bahaya = true;
+      } else cardPakan.classList.remove("danger");
+
+      alertBox.style.display = bahaya ? "block" : "none";
+
+      // CHART
+      const now = new Date().toLocaleTimeString();
+
+      chart.data.labels.push(now);
+      chart.data.datasets[0].data.push(d.suhu);
+      chart.data.datasets[1].data.push(d.gas);
+
+      if(chart.data.labels.length > 15){
+        chart.data.labels.shift();
+        chart.data.datasets.forEach(ds=>ds.data.shift());
+      }
+
+      chart.update();
+    });
+  }
+
+  // ===== CLOCK =====
+  setInterval(()=>{
+    clockEl.innerHTML = "🕒 " + new Date().toLocaleTimeString();
+  },1000);
+
+}
+</script>
+
+</body>
+</html>
